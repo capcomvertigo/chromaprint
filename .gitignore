@@ -36,3 +36,4 @@ src/Debug
 *.user
 *.ncb
 src/Release
+fpcalc
