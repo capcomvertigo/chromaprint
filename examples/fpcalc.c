@@ -15,7 +15,7 @@
 
 #define BUFFER_SIZE (AVCODEC_MAX_AUDIO_FRAME_SIZE * 2)
 
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(52, 64, 0)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(52, 94, 1)
 #define AV_SAMPLE_FMT_S16 SAMPLE_FMT_S16
 #define AVMEDIA_TYPE_AUDIO CODEC_TYPE_AUDIO
 #endif
@@ -32,6 +32,10 @@ int decode_audio_file(ChromaprintContext *chromaprint_ctx, int16_t *buffer1, int
 	AVAudioConvert *convert_ctx = NULL;
 #endif
 	int16_t *buffer;
+
+	if (!strcmp(file_name, "-")) {
+		file_name = "pipe:0";
+	}
 
 #if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(53, 2, 0)
 	if (av_open_input_file(&format_ctx, file_name, NULL, 0, NULL) != 0) {
