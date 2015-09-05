@@ -17,6 +17,7 @@ set(tests_SOURCES
 	test_audio_processor.cpp
 	test_bit_string_reader.cpp
 	test_bit_string_writer.cpp
+	test_simhash.cpp
 	test_chromaprint.cpp
 	test_chroma.cpp
 	test_chroma_filter.cpp
@@ -31,6 +32,8 @@ set(tests_SOURCES
 )
 
 add_executable(all_tests ${tests_SOURCES})
+set_target_properties(all_tests PROPERTIES
+	COMPILE_DEFINITIONS CHROMAPRINT_NODLL)
 target_link_libraries(all_tests
 	${GTEST_BOTH_LIBRARIES}
 	${CMAKE_THREAD_LIBS_INIT}

@@ -18,32 +18,35 @@
  * USA
  */
 
-#include "integral_image.h"
+#ifndef CHROMAPRINT_FFT_LIB_KISSFFT_H_
+#define CHROMAPRINT_FFT_LIB_KISSFFT_H_
 
-using namespace std;
-using namespace Chromaprint;
+#include <math.h>
+#include <tools/kiss_fftr.h>
+#include "combined_buffer.h"
 
-void IntegralImage::Transform()
+namespace Chromaprint
 {
-	int num_rows = m_image->NumRows();
-	int num_columns = m_image->NumColumns();
-	double *current = &((*m_image)[0][0]) + 1;
-	double *last = &((*m_image)[0][0]);
-	for (int m = 1; m < num_columns; m++) {
-		// First column - add value on top
-		*current = current[0] + current[-1];
-		++current;
-	}
-	for (int n = 1; n < num_rows; n++) {
-		// First row - add value on left
-		*current = current[0] + last[0];
-		++current;
-		++last;
-		// Add values on left, up and up-left
-		for (int m = 1; m < num_columns; m++) {
-			*current = current[0] + current[-1] + last[0] - last[-1];
-			++current;
-			++last;
-		}
-	}
-}
+
+	class FFTLib
+	{
+	public:
+		FFTLib(int frame_size, double *window);
+		~FFTLib();
+
+		void ComputeFrame(CombinedBuffer<short>::Iterator input, double *output);
+
+	private:
+		CHROMAPRINT_DISABLE_COPY(FFTLib);
+
+		kiss_fftr_cfg cfg;
+
+		double *m_window;
+		int m_frame_size;
+		kiss_fft_scalar *m_input;
+		kiss_fft_cpx *m_output;
+	};
+
+};
+
+#endif

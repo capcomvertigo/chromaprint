@@ -1,7 +1,28 @@
-Version 0.8 -- Unreleased
-=========================
+Version 1.2 -- August 26, 2014
+==============================
 
- - Support for reading audio from stdin in fpcalc
+ - Fixed compilation with neither libswresample nor libavresample (#11)
+ - Fixed compilation with static libav (#10)
+ - Functions chromaprint_encode_fingerprint and chromaprint_decode_fingerprint
+   are changed to accept const pointer as input
+ - Added support for using the Kiss FFT library (should make Android port easier)
+ - Removed obsolete dev tools from the package
+ - More compatible DEBUG() macro
+
+Version 1.1 -- November 23, 2013
+================================
+
+ - Fixed potential DoS attack in fingerprint decompression code. (#6)
+ - Fixed invalid memory read with some fingerprinter configurations. (#5)
+ - Fixed compilation with clang on OS X 10.9 (#7, #9)
+ - Added support for audio format conversion with libav. (#2, Gordon Pettey)
+
+Version 1.0 -- September 7, 2013
+================================
+
+ - Support for the latest FFmpeg API.
+ - Support for reading audio from stdin in fpcalc.
+ - Changed fpcalc to return non-zero status on failure.
 
 Version 0.7 -- September 5, 2012
 ================================

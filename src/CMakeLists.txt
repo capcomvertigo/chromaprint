@@ -19,6 +19,8 @@ set(chromaprint_SRCS
 	fingerprinter.cpp
 	image_builder.cpp
 	lloyds.cpp
+	simhash.h
+	simhash.cpp
 	silence_remover.cpp
 	fingerprint_calculator.cpp
 	fingerprint_compressor.cpp
@@ -52,7 +54,14 @@ if(WITH_VDSP)
 	set(chromaprint_LINK_LIBS ${ACCELERATE_LIBRARIES})
 endif()
 
+if(WITH_KISSFFT)
+	set(chromaprint_SRCS fft_lib_kissfft.cpp ${chromaprint_SRCS} ${KISSFFT_SOURCES})
+	include_directories(${KISSFFT_INCLUDE_DIRS})
+endif()
+
 add_library(chromaprint_p STATIC ${chromaprint_SRCS})
+set_target_properties(chromaprint_p PROPERTIES
+	COMPILE_DEFINITIONS CHROMAPRINT_NODLL)
 target_link_libraries(chromaprint_p ${chromaprint_LINK_LIBS})
 
 set(chromaprint_HDRS chromaprint.h)

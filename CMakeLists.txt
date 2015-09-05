@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(chromaprint)
-set(PROJECT_VERSION 0.7.0)
+set(PROJECT_VERSION 1.2.0)
 
 # 1. If the library source code has changed at all since the last update, then increment revision.
 # 2. If any interfaces have been added, removed, or changed since the last update, increment current, and set revision to 0.
 # 3. If any interfaces have been added since the last public release, then increment age.
 # 4. If any interfaces have been removed since the last public release, then set age to 0. 
 set(chromaprint_SOVERSION_CURRENT  2)
-set(chromaprint_SOVERSION_REVISION 0)
+set(chromaprint_SOVERSION_REVISION 3)
 set(chromaprint_SOVERSION_AGE      2)
 
 math(EXPR chromaprint_SOVERSION_MAJOR "${chromaprint_SOVERSION_CURRENT} - ${chromaprint_SOVERSION_AGE}")
@@ -47,8 +47,6 @@ endif()
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(BUILD_EXAMPLES "Build the examples" OFF)
 option(BUILD_TESTS "Build the test suite" OFF)
-option(BUILD_TOOLS "Build standard tools" OFF)
-option(BUILD_EXTRA_TOOLS "Build extra tools (only useful for development of this library)" OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
@@ -62,6 +60,7 @@ endif()
 option(WITH_AVFFT "Use FFmpeg for FFT calculations" OFF)
 option(WITH_FFTW3 "Use FFTW3 for FFT calculations" OFF)
 option(WITH_VDSP "Use vDSP for FFT calculations" OFF)
+option(WITH_KISSFFT "Use KissFFT for FFT calculations" OFF)
 
 set(TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/)
 
@@ -71,6 +70,7 @@ find_package(FFTW3)
 if(APPLE)
 	find_library(ACCELERATE_LIBRARIES Accelerate)
 endif()
+find_package(KissFFT)
 
 set(FFT_OPTION_COUNT 0)
 
@@ -83,8 +83,11 @@ endif()
 if(WITH_VDSP)
 	math(EXPR FFT_OPTION_COUNT "${FFT_OPTION_COUNT} + 1")
 endif()
+if(WITH_KISSFFT)
+	math(EXPR FFT_OPTION_COUNT "${FFT_OPTION_COUNT} + 1")
+endif()
 if(FFT_OPTION_COUNT GREATER "1")
-	message(FATAL_ERROR "Only one of WITH_AVFFT, WITH_FFTW3 AND WITH_VDSP can be selected")
+	message(FATAL_ERROR "Only one of WITH_AVFFT, WITH_FFTW3, WITH_VDSP and WITH_KISSFFT can be selected")
 endif()
 
 if(WITH_AVFFT AND NOT FFMPEG_LIBAVCODEC_FFT_FOUND)
@@ -99,13 +102,19 @@ if(APPLE AND WITH_VDSP AND NOT ACCELERATE_LIBRARIES)
 	message(FATAL_ERROR "vDSP (Accelerate) not found")
 endif()
 
-if(NOT WITH_AVFFT AND NOT WITH_FFTW3)
+if(WITH_KISSFFT AND NOT KISSFFT_FOUND)
+	message(FATAL_ERROR "KissFFT not found")
+endif()
+
+if(NOT WITH_AVFFT AND NOT WITH_FFTW3 AND NOT WITH_KISSFFT)
 	if(APPLE AND ACCELERATE_LIBRARIES)
 		set(WITH_VDSP ON)
 	elseif(FFMPEG_LIBAVCODEC_FFT_FOUND)
 		set(WITH_AVFFT ON)
 	elseif(FFTW3_FOUND)
 		set(WITH_FFTW3 ON)
+	elseif(KISSFFT_FOUND)
+		set(WITH_KISSFFT ON)
 	else()
 		message(FATAL_ERROR "Neither FFmpeg with avfft.h nor FFTW3 found")
 	endif()
@@ -113,13 +122,17 @@ endif()
 
 if(WITH_AVFFT)
 	message(STATUS "Using FFmpeg for FFT calculations")
-endif(WITH_AVFFT)
+endif()
 
 if(WITH_FFTW3)
 	message(STATUS "Using FFTW3 for FFT calculations")
-endif(WITH_FFTW3)
+endif()
 
-if(NOT APPLE AND NOT BUILD_FRAMEWORK)
+if(WITH_KISSFFT)
+	message(STATUS "Using KissFFT for FFT calculations")
+endif()
+
+if(NOT BUILD_FRAMEWORK)
 	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/libchromaprint.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/libchromaprint.pc)
 	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libchromaprint.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 endif()
@@ -128,12 +141,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DI
 
 add_subdirectory(src)
 
-if(BUILD_TOOLS_EXTRA)
-	find_package(PNG REQUIRED)
-endif(BUILD_TOOLS_EXTRA)
-
 find_package(Boost COMPONENTS system filesystem)
-if(BUILD_TOOLS OR BUILD_TOOLS_EXTRA OR BUILD_EXAMPLES)
+if(BUILD_EXAMPLES)
 	find_package(FFmpeg REQUIRED)
 endif()
 
@@ -141,14 +150,17 @@ if(BUILD_EXAMPLES)
 	add_subdirectory(examples)
 endif()
 
-if(BUILD_TOOLS OR BUILD_TOOLS_EXTRA)
-	find_package(Taglib REQUIRED)
-	add_subdirectory(tools)
-endif(BUILD_TOOLS OR BUILD_TOOLS_EXTRA)
-
 if(BUILD_TESTS)
 	find_package(Threads)
 	find_package(GTest REQUIRED)
 	add_subdirectory(tests)
 endif(BUILD_TESTS)
+
+configure_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+	IMMEDIATE @ONLY)
+
+add_custom_target(uninstall
+	COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 

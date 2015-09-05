@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <stdint.h>
 #include <boost/scoped_ptr.hpp>
 #include <algorithm>
 #include <vector>
@@ -19,12 +20,15 @@ TEST(API, Test2SilenceFp)
 	}
 
 	char *fp;
+	int32_t fp_hash;
 
 	chromaprint_finish(ctx);
 	chromaprint_get_fingerprint(ctx, &fp);
+	chromaprint_get_fingerprint_hash(ctx, &fp_hash);
 
 	ASSERT_EQ(18, strlen(fp));
 	EXPECT_EQ(string("AQAAA0mUaEkSRZEGAA"), string(fp));
+	ASSERT_EQ(627964279, fp_hash);
 }
 
 TEST(API, Test2SilenceRawFp)
@@ -97,3 +101,15 @@ TEST(API, TestDecodeFingerprint)
 	ASSERT_EQ(0, fingerprint[1]);
 }
 
+TEST(API, TestHashFingerprint)
+{
+	int32_t fingerprint[] = { 19681, 22345, 312312, 453425 };
+    int32_t hash;
+
+    ASSERT_EQ(0, chromaprint_hash_fingerprint(NULL, 4, &hash));
+    ASSERT_EQ(0, chromaprint_hash_fingerprint(fingerprint, -1, &hash));
+    ASSERT_EQ(0, chromaprint_hash_fingerprint(fingerprint, 4, NULL));
+
+    ASSERT_EQ(1, chromaprint_hash_fingerprint(fingerprint, 4, &hash));
+    ASSERT_EQ(17249, hash);
+}

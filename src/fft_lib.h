@@ -37,4 +37,8 @@
 #include "fft_lib_vdsp.h"
 #endif
 
+#ifdef WITH_KISSFFT
+#include "fft_lib_kissfft.h"
+#endif
+
 #endif

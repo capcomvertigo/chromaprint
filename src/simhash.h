@@ -1,12 +1,12 @@
 /*
  * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
+ * Copyright (C) 2015  Lukas Lalinsky <lalinsky@gmail.com>
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -18,10 +18,19 @@
  * USA
  */
 
-#include <algorithm>
-#include "image_utils.h"
+#ifndef CHROMAPRINT_SIMHASH_H_
+#define CHROMAPRINT_SIMHASH_H_
 
-using namespace std;
-using namespace Chromaprint;
+#include <vector>
+#include "utils.h"
 
+namespace Chromaprint
+{
 
+    int32_t SimHash(const int32_t *data, size_t size);
+
+    int32_t SimHash(const std::vector<int32_t> &data);
+
+};
+
+#endif

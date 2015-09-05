@@ -27,6 +27,7 @@
 #include "fingerprint_decompressor.h"
 #include "fingerprinter_configuration.h"
 #include "base64.h"
+#include "simhash.h"
 
 using namespace std;
 using namespace Chromaprint;
@@ -34,6 +35,7 @@ using namespace Chromaprint;
 extern "C" {
 
 struct ChromaprintContextPrivate {
+	bool finished;
 	int algorithm;
 	Fingerprinter *fingerprinter;
 	vector<int32_t> fingerprint;
@@ -56,6 +58,7 @@ const char *chromaprint_get_version(void)
 ChromaprintContext *chromaprint_new(int algorithm)
 {
 	ChromaprintContextPrivate *ctx = new ChromaprintContextPrivate();
+	ctx->finished = false;
 	ctx->algorithm = algorithm;
 	ctx->fingerprinter = new Fingerprinter(CreateFingerprinterConfiguration(algorithm));
 	return (ChromaprintContext *)ctx;
@@ -77,6 +80,7 @@ int chromaprint_set_option(ChromaprintContext *c, const char *name, int value)
 int chromaprint_start(ChromaprintContext *c, int sample_rate, int num_channels)
 {
 	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
+	ctx->finished = false;
 	return ctx->fingerprinter->Start(sample_rate, num_channels) ? 1 : 0;
 }
 
@@ -91,12 +95,16 @@ int chromaprint_finish(ChromaprintContext *c)
 {
 	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
 	ctx->fingerprint = ctx->fingerprinter->Finish();
+	ctx->finished = true;
 	return 1;
 }
 
 int chromaprint_get_fingerprint(ChromaprintContext *c, char **data)
 {
 	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
+	if (!ctx->finished) {
+		return 0;
+	}
 	string fp = Chromaprint::Base64Encode(Chromaprint::CompressFingerprint(ctx->fingerprint, ctx->algorithm));
 	*data = (char *)malloc(fp.size() + 1);
 	if (!*data) {
@@ -110,6 +118,9 @@ int chromaprint_get_fingerprint(ChromaprintContext *c, char **data)
 int chromaprint_get_raw_fingerprint(ChromaprintContext *c, void **data, int *size)
 {
 	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
+	if (!ctx->finished) {
+		return 0;
+	}
 	*data = malloc(sizeof(int32_t) * ctx->fingerprint.size());
 	if (!*data) {
 		return 0;
@@ -119,9 +130,19 @@ int chromaprint_get_raw_fingerprint(ChromaprintContext *c, void **data, int *siz
 	return 1;
 }
 
-int chromaprint_encode_fingerprint(void *fp, int size, int algorithm, void **encoded_fp, int *encoded_size, int base64)
+int chromaprint_get_fingerprint_hash(ChromaprintContext *c, void *hash)
 {
-	vector<int32_t> uncompressed = vector<int32_t>((int32_t *)fp, (int32_t *)fp + size);
+	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
+	if (!ctx->finished) {
+		return 0;
+	}
+	*((int32_t *)hash) = SimHash(ctx->fingerprint);
+	return 1;
+}
+
+int chromaprint_encode_fingerprint(const void *fp, int size, int algorithm, void **encoded_fp, int *encoded_size, int base64)
+{
+	vector<int32_t> uncompressed = vector<int32_t>((const int32_t *)fp, (const int32_t *)fp + size);
 	string compressed = Chromaprint::CompressFingerprint(uncompressed, algorithm);
 	if (!base64) {
 		*encoded_fp = malloc(compressed.size());
@@ -137,14 +158,23 @@ int chromaprint_encode_fingerprint(void *fp, int size, int algorithm, void **enc
 	return 1;
 }
 
-int chromaprint_decode_fingerprint(void *encoded_fp, int encoded_size, void **fp, int *size, int *algorithm, int base64)
+int chromaprint_decode_fingerprint(const void *encoded_fp, int encoded_size, void **fp, int *size, int *algorithm, int base64)
 {
-	string encoded = string((char *)encoded_fp, encoded_size);
+	string encoded = string((const char *)encoded_fp, encoded_size);
 	string compressed = base64 ? Chromaprint::Base64Decode(encoded) : encoded;
 	vector<int32_t> uncompressed = Chromaprint::DecompressFingerprint(compressed, algorithm);
 	*fp = malloc(sizeof(int32_t) * uncompressed.size());
 	*size = uncompressed.size();	
 	copy(uncompressed.begin(), uncompressed.end(), (int32_t *)*fp);
+	return 1;
+}
+
+int chromaprint_hash_fingerprint(const void *fp, int size, void *hash)
+{
+	if (fp == NULL || size < 0 || hash == NULL) {
+		return 0;
+	}
+	*((int32_t *)hash) = SimHash((const int32_t *)fp, size);
 	return 1;
 }
 
