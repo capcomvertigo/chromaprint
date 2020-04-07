@@ -1,35 +1,16 @@
-/*
- * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2010-2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #include <algorithm>
 #include "fingerprint_compressor.h"
-#include "bit_string_writer.h"
-#include "debug.h"
 #include "utils.h"
+#include "utils/pack_int3_array.h"
+#include "utils/pack_int5_array.h"
 
-using namespace std;
-using namespace Chromaprint;
+namespace chromaprint {
 
-static const int kMaxNormalValue = 7;
 static const int kNormalBits = 3;
-static const int kExceptionBits = 5;
+static const int kMaxNormalValue = (1 << kNormalBits) - 1;
 
 FingerprintCompressor::FingerprintCompressor()
 {
@@ -40,53 +21,47 @@ void FingerprintCompressor::ProcessSubfingerprint(uint32_t x)
 	int bit = 1, last_bit = 0;
 	while (x != 0) {
 		if ((x & 1) != 0) {
-			m_bits.push_back(bit - last_bit);
+			const auto value = bit - last_bit;
+			if (value >= kMaxNormalValue) {
+				m_normal_bits.push_back(kMaxNormalValue);
+				m_exceptional_bits.push_back(value - kMaxNormalValue);
+			} else {
+				m_normal_bits.push_back(value);
+			}
 			last_bit = bit;
 		}
 		x >>= 1;
 		bit++;
 	}
-	m_bits.push_back(0);
+	m_normal_bits.push_back(0);
 }
 
-void FingerprintCompressor::WriteNormalBits()
+void FingerprintCompressor::Compress(const std::vector<uint32_t> &data, int algorithm, std::string &output)
 {
-	BitStringWriter writer;
-	for (size_t i = 0; i < m_bits.size(); i++) {
-		writer.Write(min(int(m_bits[i]), kMaxNormalValue), kNormalBits);
-	}
-	writer.Flush();
-	m_result += writer.value();
-}
+	const auto size = data.size();
 
-void FingerprintCompressor::WriteExceptionBits()
-{
-	BitStringWriter writer;
-	for (size_t i = 0; i < m_bits.size(); i++) {
-		if (m_bits[i] >= kMaxNormalValue) {
-			writer.Write(int(m_bits[i]) - kMaxNormalValue, kExceptionBits);
-		}
-	}
-	writer.Flush();
-	m_result += writer.value();
-}
+	m_normal_bits.clear();
+	m_exceptional_bits.clear();
 
-std::string FingerprintCompressor::Compress(const vector<int32_t> &data, int algorithm)
-{
-	if (data.size() > 0) {
+	if (size > 0) {
+		m_normal_bits.reserve(size);
+		m_exceptional_bits.reserve(size / 10);
 		ProcessSubfingerprint(data[0]);
-		for (size_t i = 1; i < data.size(); i++) {
+		for (size_t i = 1; i < size; i++) {
 			ProcessSubfingerprint(data[i] ^ data[i - 1]);
 		}
 	}
-	int length = data.size();
-	m_result.resize(4);
-	m_result[0] = algorithm & 255;
-	m_result[1] = (length >> 16) & 255;
-	m_result[2] = (length >>  8) & 255;
-	m_result[3] = (length      ) & 255;
-	WriteNormalBits();
-	WriteExceptionBits();
-	return m_result;
+
+	output.resize(4 + GetPackedInt3ArraySize(m_normal_bits.size()) + GetPackedInt5ArraySize(m_exceptional_bits.size()));
+	output[0] = algorithm & 255;
+	output[1] = (size >> 16) & 255;
+	output[2] = (size >>  8) & 255;
+	output[3] = (size      ) & 255;
+
+	auto ptr = output.begin() + 4;
+	ptr = PackInt3Array(m_normal_bits.begin(), m_normal_bits.end(), ptr);
+	ptr = PackInt5Array(m_exceptional_bits.begin(), m_exceptional_bits.end(), ptr);
 }
+
+}; // namespace chromaprint
 

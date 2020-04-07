@@ -4,8 +4,7 @@
 #include "fft_frame.h"
 #include "chroma.h"
 
-using namespace std;
-using namespace Chromaprint;
+using namespace chromaprint;
 
 class FeatureVectorBuffer : public FeatureVectorConsumer
 {

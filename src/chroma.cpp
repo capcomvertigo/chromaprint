@@ -1,32 +1,14 @@
-/*
- * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2010-2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #include <limits>
-#include <math.h>
+#include <cmath>
 #include "fft_frame.h"
 #include "utils.h"
 #include "chroma.h"
 #include "debug.h"
 
-using namespace std;
-using namespace Chromaprint;
+namespace chromaprint {
 
 static const int NUM_BANDS = 12;
 
@@ -51,8 +33,8 @@ Chroma::~Chroma()
 
 void Chroma::PrepareNotes(int min_freq, int max_freq, int frame_size, int sample_rate)
 {
-	m_min_index = max(1, FreqToIndex(min_freq, frame_size, sample_rate));
-	m_max_index = min(frame_size / 2, FreqToIndex(max_freq, frame_size, sample_rate));
+	m_min_index = std::max(1, FreqToIndex(min_freq, frame_size, sample_rate));
+	m_max_index = std::min(frame_size / 2, FreqToIndex(max_freq, frame_size, sample_rate));
 	for (int i = m_min_index; i < m_max_index; i++) {
 		double freq = IndexToFreq(i, frame_size, sample_rate);
 		double octave = FreqToOctave(freq);
@@ -71,7 +53,7 @@ void Chroma::Consume(const FFTFrame &frame)
 	fill(m_features.begin(), m_features.end(), 0.0);
 	for (int i = m_min_index; i < m_max_index; i++) {
 		int note = m_notes[i];
-		double energy = frame.Energy(i);
+		double energy = frame[i];
 		if (m_interpolate) {
 			int note2 = note;
 			double a = 1.0;
@@ -93,3 +75,4 @@ void Chroma::Consume(const FFTFrame &frame)
 	m_consumer->Consume(m_features);
 }
 
+}; // namespace chromaprint

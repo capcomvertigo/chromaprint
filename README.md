@@ -1,97 +1,114 @@
-Chromaprint
-===========
+# Chromaprint
 
-Dependencies
-------------
+[![build status](https://code.oxygene.sk/acoustid/chromaprint/badges/master/build.svg)](https://code.oxygene.sk/acoustid/chromaprint/commits/master)
 
-The library itself only depends on a FFT library, which at the moment can
-be either [FFmpeg][1] (at least r22291, 0.6 is fine), [FFTW3][2] or if you are
-on iOS or OS X, you can use the Accelerate/vDSP framework. See the next
-section for details.
+Chromaprint is an audio fingerprint library developed for the [AcoustID][acoustid] project. It's designed to identify near-identical audio
+and the fingerprints it generates are as compact as possible to achieve that. It's not a general purpose audio fingerprinting solution.
+It trades precision and robustness for search performance. The target use cases are full audio file identifcation,
+duplicate audio file detection and long audio stream monitoring.
 
-The `fpcalc` utility included in the package requires FFmpeg (can be older).
+[acoustid]: https://acoustid.org/
 
-In order to build the test suite, you will need the [Google Test library][4] and [Boost Filesystem][3].
-
-[1]: http://www.ffmpeg.org/
-[2]: http://www.fftw.org/
-[3]: http://www.boost.org/
-[4]: http://code.google.com/p/googletest/
-
-Installing
-----------
+## Building
 
 The most common way to build Chromaprint is like this:
 
-    $ cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON .
+    $ cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TOOLS=ON .
     $ make
     $ sudo make install
 
 This will build Chromaprint as a shared library and also include the `fpcalc`
-utility (which is used by MusicBrainz Picard, for example).
+utility (which is used by MusicBrainz Picard, for example). For this to work,
+you will need to have the FFmpeg libraries installed.
 
 See below for other options.
 
-FFT Library
------------
+### FFT Library
 
-Chromaprint can use three FFT libraries, FFmpeg, FFTW3 and vDSP. FFmpeg is
-preffered, as it's a little faster for our purposes and it's LGPL-licensed,
-so it doesn't impact the license of Chromaprint. The FFT interface was added
-only recently though, so it might not be available in Linux distributions yet.
-FFTW3 can be used in this case, but this library is released under the GPL
+Chromaprint can use multiple FFT libraries -- [FFmpeg][ffmpeg], [FFTW3][fftw], [KissFFT][kissfft] or
+[vDSP][vdsp] (macOS).
+
+FFmpeg is preferred on all systems except for macOS, where you should use
+the standard vDSP framework. These are the fastest options.
+
+FFTW3 can be also used, but this library is released under the GPL
 license, which makes also the resulting Chromaprint binary GPL licensed.
 
-If you run simple `cmake .`, it will try to find both FFmpeg and FFTW3 and
-select the first one it finds. If you have new FFmpeg installed in a separate
-location, you can let CMake know using the `FFMPEG_ROOT` option:
+KissFFT is the slowest option, but it's distributed with a permissive license
+and it's very easy to build on platforms that do not have packaged
+versions of FFmpeg or FFTW3. We ship a copy of KissFFT, so if
+the build system is unable to find another FFT library it will use
+that as a fallback.
+
+You can explicitly set which library to use with the `FFT_LIB` option.
+For example:
+
+    $ cmake -DFFT_LIB=kissfft .
+
+[ffmpeg]: https://www.ffmpeg.org/
+[fftw]: http://www.fftw.org/
+[kissfft]: https://sourceforge.net/projects/kissfft/
+[vdsp]: https://developer.apple.com/reference/accelerate/1652565-vdsp
+
+### FFmpeg
+
+FFmpeg is as a FFT library and also for audio decoding and resampling in `fpcalc`.
+If you have FFmpeg installed in a non-standard location, you can use the `FFMPEG_ROOT` option to specify where:
 
     $ cmake -DFFMPEG_ROOT=/path/to/local/ffmpeg/install .
 
-If you have new FFmpeg installed, but for some reason prefer to use FFTW3, you
-can use the `WITH_FFTW3` option:  
+While we try to make sure things work also with libav, FFmpeg is preferred.
 
-    $ cmake -DWITH_FFTW3=ON .
+## API Documentation
 
-There is also a `WITH_AVFFT` option, but the script will select the FFmpeg FFT
-automatically if it's available, so it shouldn't be necessary to use it.
+You can use Doxygen to generate a HTML version of the API documentation:
 
-If you are on Mac, you can use the standard Accelerate framework with the vDSP
-library. This requires you to install no external libraries. It will use
-vDSP by default on OS X (but there still is a `WITH_VDSP` option).
+    $ make docs
+    $ $BROWSER docs/html/index.html
 
-Unit Tests
-----------
+## Unit Tests
 
 The test suite can be built and run using the following commands:
 
     $ cmake -DBUILD_TESTS=ON .
     $ make check
 
-Related Projects
-----------------
+In order to build the test suite, you will need the sources of the [Google Test][gtest] library.
 
- * [pyacoustid][]
- * [node-acoustid][] and [node-fpcalc][]
- * [chromaprint component in gst-plugins-bad][gst]
- * [AcoustID.NET][]
- 
-[pyacoustid]: https://github.com/sampsyo/pyacoustid
-[gst]: http://cgit.freedesktop.org/gstreamer/gst-plugins-bad/tree/ext/chromaprint
-[node-acoustid]: https://github.com/parshap/node-acoustid
-[node-fpcalc]: https://github.com/parshap/node-fpcalc
-[AcoustID.NET]: https://github.com/wo80/AcoustID.NET
+[gtest]: https://github.com/google/googletest
 
-Standing on the Shoulder of Giants
-----------------------------------
+## Related Projects
+
+Bindings, wrappers and reimplementations in other languages:
+
+ * [Python](https://github.com/beetbox/pyacoustid)
+ * [Rust](https://github.com/jameshurst/rust-chromaprint)
+ * [Ruby](https://github.com/TMXCredit/chromaprint)
+ * [Perl](https://github.com/jonathanstowe/Audio-Fingerprint-Chromaprint)
+ * [JavaScript](https://github.com/parshap/node-fpcalc)
+ * [JavaScript](https://github.com/bjjb/chromaprint.js) (reimplementation)
+ * [Go](https://github.com/go-fingerprint/gochroma)
+ * [C#](https://github.com/wo80/AcoustID.NET) (reimplementation)
+ * [C#](https://github.com/protyposis/Aurio/tree/master/Aurio/Aurio/Matching/Chromaprint) (reimplementation)
+ * [Pascal](https://github.com/CMCHTPC/ChromaPrint) (reimplementation)
+ * [C++/CLI](https://github.com/CyberSinh/Luminescence.Audio)
+
+Integrations:
+
+ * [FFmpeg](https://www.ffmpeg.org/ffmpeg-formats.html#chromaprint-1)
+ * [GStreamer](http://cgit.freedesktop.org/gstreamer/gst-plugins-bad/tree/ext/chromaprint)
+
+If you know about a project that is not listed here, but should be, please let me know.
+
+## Standing on the Shoulders of Giants
 
 I've learned a lot while working on this project, which would not be possible
 without having information from past research. I've read many papers, but the
 concrete ideas implemented in this library are based on the following papers:
 
  * Yan Ke, Derek Hoiem, Rahul Sukthankar. Computer Vision for Music
-   Identification, Proceedings of Computer Vision and Pattern Recognition,
-   2005. http://www.cs.cmu.edu/~yke/musicretrieval/
+   Identification, Proceedings of Computer Vision and Pattern Recognition, 2005.
+   http://www.cs.cmu.edu/~yke/musicretrieval/
 
  * Frank Kurth, Meinard Müller. Efficient Index-Based Audio Matching, 2008.
    http://dx.doi.org/10.1109/TASL.2007.911552

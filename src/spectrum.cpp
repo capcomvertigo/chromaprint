@@ -1,22 +1,5 @@
-/*
- * Spectrumprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #include <limits>
 #include <math.h>
@@ -24,8 +7,7 @@
 #include "utils.h"
 #include "spectrum.h"
 
-using namespace std;
-using namespace Chromaprint;
+namespace chromaprint {
 
 Spectrum::Spectrum(int num_bands, int min_freq, int max_freq, int frame_size, int sample_rate, FeatureVectorConsumer *consumer)
 	: m_bands(num_bands + 1),
@@ -77,7 +59,7 @@ void Spectrum::Consume(const FFTFrame &frame)
 		double numerator = 0.0;
 		double denominator = 0.0;
 		for (int j = first; j < last; j++) {
-			double s = frame.Energy(j);
+			double s = frame[j];
 			numerator += j * s;
 			denominator += s;
 		}
@@ -86,3 +68,4 @@ void Spectrum::Consume(const FFTFrame &frame)
 	m_consumer->Consume(m_features);
 }
 
+}; // namespace chromaprint

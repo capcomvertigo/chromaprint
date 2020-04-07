@@ -38,3 +38,4 @@ src/Debug
 *.ncb
 src/Release
 fpcalc
+fpcmp

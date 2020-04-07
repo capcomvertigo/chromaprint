@@ -1,22 +1,5 @@
-/*
- * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010-2012  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #include <string.h>
 #include "fingerprinter.h"
@@ -33,43 +16,35 @@
 #include "utils.h"
 #include "debug.h"
 
-using namespace std;
-using namespace Chromaprint;
+namespace chromaprint {
 
-static const int SAMPLE_RATE = 11025;
-static const int FRAME_SIZE = 4096;
-static const int OVERLAP = FRAME_SIZE - FRAME_SIZE / 3;
 static const int MIN_FREQ = 28;
 static const int MAX_FREQ = 3520;
 
-Fingerprinter::Fingerprinter(FingerprinterConfiguration *config)
-	: m_image(12)
-{
+Fingerprinter::Fingerprinter(FingerprinterConfiguration *config) {
 	if (!config) {
 		config = new FingerprinterConfigurationTest1();
 	}
-	m_image_builder = new ImageBuilder(&m_image);
-	m_chroma_normalizer = new ChromaNormalizer(m_image_builder);
+	m_fingerprint_calculator = new FingerprintCalculator(config->classifiers(), config->num_classifiers());
+	m_chroma_normalizer = new ChromaNormalizer(m_fingerprint_calculator);
 	m_chroma_filter = new ChromaFilter(config->filter_coefficients(), config->num_filter_coefficients(), m_chroma_normalizer);
-	m_chroma = new Chroma(MIN_FREQ, MAX_FREQ, FRAME_SIZE, SAMPLE_RATE, m_chroma_filter);
+	m_chroma = new Chroma(MIN_FREQ, MAX_FREQ, config->frame_size(), config->sample_rate(), m_chroma_filter);
 	//m_chroma->set_interpolate(true);
-	m_fft = new FFT(FRAME_SIZE, OVERLAP, m_chroma);
+	m_fft = new FFT(config->frame_size(), config->frame_overlap(), m_chroma);
 	if (config->remove_silence()) {
 		m_silence_remover = new SilenceRemover(m_fft);
 		m_silence_remover->set_threshold(config->silence_threshold());
-		m_audio_processor = new AudioProcessor(SAMPLE_RATE, m_silence_remover);
+		m_audio_processor = new AudioProcessor(config->sample_rate(), m_silence_remover);
 	}
 	else {
 		m_silence_remover = 0;
-		m_audio_processor = new AudioProcessor(SAMPLE_RATE, m_fft);
+		m_audio_processor = new AudioProcessor(config->sample_rate(), m_fft);
 	}
-	m_fingerprint_calculator = new FingerprintCalculator(config->classifiers(), config->num_classifiers());
 	m_config = config;
 }
 
 Fingerprinter::~Fingerprinter()
 {
-	delete m_fingerprint_calculator;
 	delete m_audio_processor;
 	if (m_silence_remover) {
 		delete m_silence_remover;
@@ -78,7 +53,7 @@ Fingerprinter::~Fingerprinter()
 	delete m_chroma;
 	delete m_chroma_filter;
 	delete m_chroma_normalizer;
-	delete m_image_builder;
+	delete m_fingerprint_calculator;
 	delete m_config;
 }
 
@@ -103,20 +78,27 @@ bool Fingerprinter::Start(int sample_rate, int num_channels)
 	m_chroma->Reset();
 	m_chroma_filter->Reset();
 	m_chroma_normalizer->Reset();
-	m_image = Image(12); // XXX
-	m_image_builder->Reset(&m_image);
+	m_fingerprint_calculator->Reset();
 	return true;
 }
 
-void Fingerprinter::Consume(short *samples, int length)
+void Fingerprinter::Consume(const int16_t *samples, int length)
 {
 	assert(length >= 0);
 	m_audio_processor->Consume(samples, length);
 }
 
-vector<int32_t> Fingerprinter::Finish()
+void Fingerprinter::Finish()
 {
 	m_audio_processor->Flush();
-	return m_fingerprint_calculator->Calculate(&m_image);
 }
 
+const std::vector<uint32_t> &Fingerprinter::GetFingerprint() const {
+	return m_fingerprint_calculator->GetFingerprint();
+}
+
+void Fingerprinter::ClearFingerprint() {
+	m_fingerprint_calculator->ClearFingerprint();
+}
+
+}; // namespace chromaprint

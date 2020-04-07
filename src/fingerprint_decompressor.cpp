@@ -1,29 +1,15 @@
-/*
- * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #include "fingerprint_decompressor.h"
 #include "debug.h"
+#include "utils/pack_int3_array.h"
+#include "utils/pack_int5_array.h"
+#include "utils/unpack_int3_array.h"
+#include "utils/unpack_int5_array.h"
 #include "utils.h"
 
-using namespace std;
-using namespace Chromaprint;
+namespace chromaprint {
 
 static const int kMaxNormalValue = 7;
 static const int kNormalBits = 3;
@@ -51,73 +37,64 @@ void FingerprintDecompressor::UnpackBits()
 	}
 }
 
-bool FingerprintDecompressor::ReadNormalBits(BitStringReader *reader)
-{
-	size_t i = 0;
-	while (i < m_result.size()) {
-		int bit = reader->Read(kNormalBits);
-		if (bit == 0) {
-			i++;
-		}
-		m_bits.push_back(bit);
-	}
-	return true;
-}
-
-bool FingerprintDecompressor::ReadExceptionBits(BitStringReader *reader)
-{
-	for (size_t i = 0; i < m_bits.size(); i++) {
-		if (m_bits[i] == kMaxNormalValue) {
-			if (reader->eof()) {
-				DEBUG("FingerprintDecompressor::ReadExceptionBits() -- Invalid fingerprint (reached EOF while reading exception bits)");
-				return false;
-			}
-			m_bits[i] += reader->Read(kExceptionBits);
-		}
-	}
-	return true;
-}
-
-std::vector<int32_t> FingerprintDecompressor::Decompress(const string &data, int *algorithm)
+std::vector<uint32_t> FingerprintDecompressor::Decompress(const std::string &data, int *algorithm)
 {
 	if (data.size() < 4) {
 		DEBUG("FingerprintDecompressor::Decompress() -- Invalid fingerprint (shorter than 4 bytes)");
-		return std::vector<int32_t>();
+		return std::vector<uint32_t>();
 	}
 
 	if (algorithm) {
 		*algorithm = data[0];
 	}
 
-	size_t length =
+	const size_t num_values =
 		((unsigned char)(data[1]) << 16) |
 		((unsigned char)(data[2]) <<  8) |
 		((unsigned char)(data[3])      );
 
-	BitStringReader reader(data);
-	reader.Read(8);
-	reader.Read(8);
-	reader.Read(8);
-	reader.Read(8);
+	size_t offset = 4;
+	m_bits.resize(GetUnpackedInt3ArraySize(data.size() - offset));
+	UnpackInt3Array(data.begin() + offset, data.end(), m_bits.begin());
 
-	if (reader.AvailableBits() < length * kNormalBits) {
-		DEBUG("FingerprintDecompressor::Decompress() -- Invalid fingerprint (too short)");
-		return std::vector<int32_t>();
+	size_t found_values = 0, num_exceptional_bits = 0;
+	for (size_t i = 0; i < m_bits.size(); i++) {
+		if (m_bits[i] == 0) {
+			found_values += 1;
+			if (found_values == num_values) {
+				m_bits.resize(i + 1);
+				break;
+			}
+		} else if (m_bits[i] == kMaxNormalValue) {
+			num_exceptional_bits += 1;
+		}
 	}
 
-	m_result = vector<int32_t>(length, -1);
-
-	reader.Reset();
-	if (!ReadNormalBits(&reader)) {
-		return std::vector<int32_t>();
+	if (found_values != num_values) {
+		DEBUG("FingerprintDecompressor::Decompress() -- Invalid fingerprint (too short, not enough data for normal bits)");
+		return std::vector<uint32_t>();
 	}
 
-	reader.Reset();
-	if (!ReadExceptionBits(&reader)) {
-		return std::vector<int32_t>();
+	offset += GetPackedInt3ArraySize(m_bits.size());
+	if (data.size() < offset + GetPackedInt5ArraySize(num_exceptional_bits)) {
+		DEBUG("FingerprintDecompressor::Decompress() -- Invalid fingerprint (too short, not enough data for exceptional bits)");
+		return std::vector<uint32_t>();
 	}
+
+	if (num_exceptional_bits) {
+		m_exceptional_bits.resize(GetUnpackedInt5ArraySize(GetPackedInt5ArraySize(num_exceptional_bits)));
+		UnpackInt5Array(data.begin() + offset, data.end(), m_exceptional_bits.begin());
+		for (size_t i = 0, j = 0; i < m_bits.size(); i++) {
+			if (m_bits[i] == kMaxNormalValue) {
+				m_bits[i] += m_exceptional_bits[j++];
+			}
+		}
+	}
+
+	m_result.assign(num_values, -1);
 
 	UnpackBits();
 	return m_result;
 }
 
+}; // namespace chromaprint

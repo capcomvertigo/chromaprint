@@ -1,62 +1,51 @@
-/*
- * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2010-2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #ifndef CHROMAPRINT_FFT_H_
 #define CHROMAPRINT_FFT_H_
 
-#include <math.h>
+#include <cmath>
+#include <memory>
 #include "utils.h"
 #include "fft_frame.h"
 #include "fft_frame_consumer.h"
 #include "audio_consumer.h"
-#include "combined_buffer.h"
+#include "audio/audio_slicer.h"
 
-namespace Chromaprint
+namespace chromaprint {
+
+class FFTLib;
+
+class FFT : public AudioConsumer
 {
-	class FFTLib;
+public:
+	FFT(size_t frame_size, size_t overlap, FFTFrameConsumer *consumer);
+	~FFT();
 
-	class FFT : public AudioConsumer
-	{
-	public:
-		FFT(int frame_size, int overlap, FFTFrameConsumer *consumer);
-		~FFT();
+	size_t frame_size() const {
+		return m_slicer.size();
+	}
 
-		int FrameSize() const { return m_frame_size; }
-		int Overlap() const { return m_frame_size - m_increment; }
+	size_t increment() const {
+		return m_slicer.increment();
+	}
 
-		void Reset();
-		void Consume(short *input, int length);
+	size_t overlap() const {
+		return m_slicer.size() - m_slicer.increment();
+	}
 
-	private:
-		CHROMAPRINT_DISABLE_COPY(FFT);
+	void Reset();
+	void Consume(const int16_t *input, int length) override;
 
-		double *m_window;
-		int m_buffer_offset;
-		short *m_buffer;
-		FFTFrame m_frame;
-		int m_frame_size;
-		int m_increment;
-		FFTLib *m_lib;
-		FFTFrameConsumer *m_consumer;
-	};
+private:
+	CHROMAPRINT_DISABLE_COPY(FFT);
 
+	FFTFrame m_frame;
+	AudioSlicer<int16_t> m_slicer;
+	std::unique_ptr<FFTLib> m_lib;
+	FFTFrameConsumer *m_consumer;
 };
+
+}; // namespace chromaprint
 
 #endif

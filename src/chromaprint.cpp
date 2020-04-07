@@ -1,45 +1,43 @@
-/*
- * Chromaprint -- Audio fingerprinting toolkit
- * Copyright (C) 2010  Lukas Lalinsky <lalinsky@gmail.com>
- * 
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
+// Copyright (C) 2010-2016  Lukas Lalinsky
+// Distributed under the MIT license, see the LICENSE file for details.
 
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <memory>
+#include <cstring>
 #include <chromaprint.h>
 #include "fingerprinter.h"
 #include "fingerprint_compressor.h"
 #include "fingerprint_decompressor.h"
+#include "fingerprint_matcher.h"
 #include "fingerprinter_configuration.h"
-#include "base64.h"
+#include "utils/base64.h"
 #include "simhash.h"
+#include "debug.h"
 
-using namespace std;
-using namespace Chromaprint;
+using namespace chromaprint;
+
+struct ChromaprintContextPrivate {
+	ChromaprintContextPrivate(int algorithm)
+		: algorithm(algorithm),
+		  fingerprinter(CreateFingerprinterConfiguration(algorithm)) {}
+	int algorithm;
+	Fingerprinter fingerprinter;
+	FingerprintCompressor compressor;
+	std::string tmp_fingerprint;
+};
+
+struct ChromaprintMatcherContextPrivate {
+	int algorithm = -1;
+	std::unique_ptr<FingerprintMatcher> matcher;
+	std::vector<uint32_t> fp[2];
+	FingerprintDecompressor decompressor;
+};
 
 extern "C" {
 
-struct ChromaprintContextPrivate {
-	bool finished;
-	int algorithm;
-	Fingerprinter *fingerprinter;
-	vector<int32_t> fingerprint;
-};
+#define FAIL_IF(x, msg) if (x) { DEBUG(msg); return 0; }
 
 #define STR(x) #x
 #define VERSION_STR(major, minor, patch) \
@@ -57,124 +55,147 @@ const char *chromaprint_get_version(void)
 
 ChromaprintContext *chromaprint_new(int algorithm)
 {
-	ChromaprintContextPrivate *ctx = new ChromaprintContextPrivate();
-	ctx->finished = false;
-	ctx->algorithm = algorithm;
-	ctx->fingerprinter = new Fingerprinter(CreateFingerprinterConfiguration(algorithm));
-	return (ChromaprintContext *)ctx;
+	return new ChromaprintContextPrivate(algorithm);
 }
 
-void chromaprint_free(ChromaprintContext *c)
+void chromaprint_free(ChromaprintContext *ctx)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	delete ctx->fingerprinter;
-	delete ctx;
+	if (ctx) {
+		delete ctx;
+	}
 }
 
-int chromaprint_set_option(ChromaprintContext *c, const char *name, int value)
+int chromaprint_set_option(ChromaprintContext *ctx, const char *name, int value)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	return ctx->fingerprinter->SetOption(name, value) ? 1 : 0;
+	FAIL_IF(!ctx, "context can't be NULL");
+	return ctx->fingerprinter.SetOption(name, value) ? 1 : 0;
 }
 
-int chromaprint_start(ChromaprintContext *c, int sample_rate, int num_channels)
+int chromaprint_get_num_channels(ChromaprintContext *ctx)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	ctx->finished = false;
-	return ctx->fingerprinter->Start(sample_rate, num_channels) ? 1 : 0;
-}
-
-int chromaprint_feed(ChromaprintContext *c, void *data, int length)
-{
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	ctx->fingerprinter->Consume((short *)data, length);
 	return 1;
 }
 
-int chromaprint_finish(ChromaprintContext *c)
+int chromaprint_get_sample_rate(ChromaprintContext *ctx)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	ctx->fingerprint = ctx->fingerprinter->Finish();
-	ctx->finished = true;
+	return ctx ? ctx->fingerprinter.config()->sample_rate() : 0;
+}
+
+int chromaprint_get_item_duration(ChromaprintContext *ctx)
+{
+	return ctx ? ctx->fingerprinter.config()->item_duration() : 0;
+}
+
+int chromaprint_get_item_duration_ms(ChromaprintContext *ctx)
+{
+	return ctx ? ctx->fingerprinter.config()->item_duration_in_seconds() * 1000 : 0;
+}
+
+int chromaprint_get_delay(ChromaprintContext *ctx)
+{
+	return ctx ? ctx->fingerprinter.config()->delay() : 0;
+}
+
+int chromaprint_get_delay_ms(ChromaprintContext *ctx)
+{
+	return ctx ? ctx->fingerprinter.config()->delay_in_seconds() * 1000 : 0;
+}
+
+int chromaprint_start(ChromaprintContext *ctx, int sample_rate, int num_channels)
+{
+	FAIL_IF(!ctx, "context can't be NULL");
+	return ctx->fingerprinter.Start(sample_rate, num_channels) ? 1 : 0;
+}
+
+int chromaprint_feed(ChromaprintContext *ctx, const int16_t *data, int length)
+{
+	FAIL_IF(!ctx, "context can't be NULL");
+	ctx->fingerprinter.Consume(data, length);
 	return 1;
 }
 
-int chromaprint_get_fingerprint(ChromaprintContext *c, char **data)
+int chromaprint_finish(ChromaprintContext *ctx)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	if (!ctx->finished) {
-		return 0;
-	}
-	string fp = Chromaprint::Base64Encode(Chromaprint::CompressFingerprint(ctx->fingerprint, ctx->algorithm));
-	*data = (char *)malloc(fp.size() + 1);
-	if (!*data) {
-		return 0;
-	}
-	copy(fp.begin(), fp.end(), *data);
-	(*data)[fp.size()] = 0;
+	FAIL_IF(!ctx, "context can't be NULL");
+	ctx->fingerprinter.Finish();
 	return 1;
 }
 
-int chromaprint_get_raw_fingerprint(ChromaprintContext *c, void **data, int *size)
+int chromaprint_get_fingerprint(ChromaprintContext *ctx, char **data)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	if (!ctx->finished) {
-		return 0;
-	}
-	*data = malloc(sizeof(int32_t) * ctx->fingerprint.size());
-	if (!*data) {
-		return 0;
-	}
-	*size = ctx->fingerprint.size();
-	copy(ctx->fingerprint.begin(), ctx->fingerprint.end(), *((int32_t **)data));
+	FAIL_IF(!ctx, "context can't be NULL");
+	ctx->compressor.Compress(ctx->fingerprinter.GetFingerprint(), ctx->algorithm, ctx->tmp_fingerprint);
+	*data = (char *) malloc(GetBase64EncodedSize(ctx->tmp_fingerprint.size()) + 1);
+	FAIL_IF(!*data, "can't allocate memory for the result");
+	Base64Encode(ctx->tmp_fingerprint.begin(), ctx->tmp_fingerprint.end(), *data, true);
 	return 1;
 }
 
-int chromaprint_get_fingerprint_hash(ChromaprintContext *c, void *hash)
+int chromaprint_get_raw_fingerprint(ChromaprintContext *ctx, uint32_t **data, int *size)
 {
-	ChromaprintContextPrivate *ctx = (ChromaprintContextPrivate *)c;
-	if (!ctx->finished) {
-		return 0;
-	}
-	*((int32_t *)hash) = SimHash(ctx->fingerprint);
+	FAIL_IF(!ctx, "context can't be NULL");
+	const auto fingerprint = ctx->fingerprinter.GetFingerprint();
+	*data = (uint32_t *) malloc(sizeof(uint32_t) * fingerprint.size());
+	FAIL_IF(!*data, "can't allocate memory for the result");
+	*size = fingerprint.size();
+	std::copy(fingerprint.begin(), fingerprint.end(), *data);
 	return 1;
 }
 
-int chromaprint_encode_fingerprint(const void *fp, int size, int algorithm, void **encoded_fp, int *encoded_size, int base64)
+int chromaprint_get_raw_fingerprint_size(ChromaprintContext *ctx, int *size)
 {
-	vector<int32_t> uncompressed = vector<int32_t>((const int32_t *)fp, (const int32_t *)fp + size);
-	string compressed = Chromaprint::CompressFingerprint(uncompressed, algorithm);
-	if (!base64) {
-		*encoded_fp = malloc(compressed.size());
-		*encoded_size = compressed.size();	
-		copy(compressed.begin(), compressed.end(), (char *)*encoded_fp);
-		return 1;
+	FAIL_IF(!ctx, "context can't be NULL");
+	const auto fingerprint = ctx->fingerprinter.GetFingerprint();
+	*size = fingerprint.size();
+	return 1;
+}
+
+int chromaprint_get_fingerprint_hash(ChromaprintContext *ctx, uint32_t *hash)
+{
+	FAIL_IF(!ctx, "context can't be NULL");
+	*hash = SimHash(ctx->fingerprinter.GetFingerprint());
+	return 1;
+}
+
+int chromaprint_clear_fingerprint(ChromaprintContext *ctx)
+{
+	FAIL_IF(!ctx, "context can't be NULL");
+	ctx->fingerprinter.ClearFingerprint();
+	return 1;
+}
+
+int chromaprint_encode_fingerprint(const uint32_t *fp, int size, int algorithm, char **encoded_fp, int *encoded_size, int base64)
+{
+	std::vector<uint32_t> uncompressed(fp, fp + size);
+	std::string encoded = CompressFingerprint(uncompressed, algorithm);
+	if (base64) {
+		encoded = Base64Encode(encoded);
 	}
-	string encoded = Chromaprint::Base64Encode(compressed);
-	*encoded_fp = malloc(encoded.size() + 1);
+	*encoded_fp = (char *) malloc(encoded.size() + 1);
 	*encoded_size = encoded.size();	
-	copy(encoded.begin(), encoded.end(), (char *)*encoded_fp);
-	((char *)*encoded_fp)[encoded.size()] = 0;
+	std::copy(encoded.data(), encoded.data() + encoded.size() + 1, *encoded_fp);
 	return 1;
 }
 
-int chromaprint_decode_fingerprint(const void *encoded_fp, int encoded_size, void **fp, int *size, int *algorithm, int base64)
+int chromaprint_decode_fingerprint(const char *encoded_fp, int encoded_size, uint32_t **fp, int *size, int *algorithm, int base64)
 {
-	string encoded = string((const char *)encoded_fp, encoded_size);
-	string compressed = base64 ? Chromaprint::Base64Decode(encoded) : encoded;
-	vector<int32_t> uncompressed = Chromaprint::DecompressFingerprint(compressed, algorithm);
-	*fp = malloc(sizeof(int32_t) * uncompressed.size());
-	*size = uncompressed.size();	
-	copy(uncompressed.begin(), uncompressed.end(), (int32_t *)*fp);
+	std::string encoded(encoded_fp, encoded_size);
+	if (base64) {
+		encoded = Base64Decode(encoded);
+	}
+	std::vector<uint32_t> uncompressed = DecompressFingerprint(encoded, algorithm);
+	*fp = (uint32_t *) malloc(sizeof(uint32_t) * uncompressed.size());
+	*size = uncompressed.size();
+	std::copy(uncompressed.begin(), uncompressed.end(), *fp);
 	return 1;
 }
 
-int chromaprint_hash_fingerprint(const void *fp, int size, void *hash)
+int chromaprint_hash_fingerprint(const uint32_t *fp, int size, uint32_t *hash)
 {
 	if (fp == NULL || size < 0 || hash == NULL) {
 		return 0;
 	}
-	*((int32_t *)hash) = SimHash((const int32_t *)fp, size);
+	*hash = SimHash(fp, size);
 	return 1;
 }
 
@@ -183,4 +204,4 @@ void chromaprint_dealloc(void *ptr)
 	free(ptr);
 }
 
-}
+}; // extern "C"
